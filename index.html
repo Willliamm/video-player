@@ -1,0 +1,419 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#0b0d12">
+<title>Player de Vídeo</title>
+<style>
+  :root {
+    --bg: #0b0d12;
+    --panel-2: #1d2330;
+    --text: #e9edf5;
+    --muted: #8b95a8;
+    --accent: #3b82f6;
+    --accent-2: #60a5fa;
+    --border: #262d3b;
+    --minus: #f0787f;
+    --plus: #6fb7ff;
+    --gap: 7px;
+    --vh: 100vh;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+  /* Página travada: sem rolagem e sem "puxar" a tela. */
+  html, body {
+    margin: 0; padding: 0; height: 100%;
+    overflow: hidden; overscroll-behavior: none; touch-action: manipulation;
+  }
+  body {
+    position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+    background: var(--bg); color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    -webkit-user-select: none; user-select: none;
+  }
+
+  #app {
+    height: var(--vh);
+    height: 100dvh;
+    display: flex; flex-direction: column; gap: var(--gap);
+    padding: calc(var(--gap) + env(safe-area-inset-top)) var(--gap)
+             calc(var(--gap) + env(safe-area-inset-bottom));
+  }
+
+  button, select, input {
+    font-family: inherit; color: var(--text);
+    background: var(--panel-2); border: 1px solid var(--border); border-radius: 12px;
+  }
+  button {
+    appearance: none; cursor: pointer; display: flex;
+    align-items: center; justify-content: center; gap: 6px;
+    line-height: 1.1; padding: 4px;
+  }
+  button:active { background: #2a3242; }
+  .btn-primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .btn-primary:active { background: #2f6fd8; }
+  select { appearance: none; padding: 6px 8px; font-size: 16px; text-align: center; }
+  input[type="text"] { padding: 6px 8px; font-size: 16px; text-align: center; }
+
+  /* ---------- 1. barra de cima ---------- */
+  .topbar { flex: 0 0 auto; display: flex; gap: var(--gap); height: 46px; }
+  #pickBtn { flex: 0 0 auto; padding: 0 16px; font-size: 1rem; font-weight: 600; }
+  #playlist { flex: 1 1 auto; min-width: 0; }
+
+  /* ---------- 2. vídeo: no máximo 30% da altura ---------- */
+  .stage {
+    flex: 0 0 auto;
+    height: calc(var(--vh) * 0.30);
+    height: 30dvh;
+    position: relative; background: #000; overflow: hidden;
+    border: 1px solid var(--border); border-radius: 14px;
+  }
+  video { width: 100%; height: 100%; object-fit: contain; background: #000; display: block; }
+  .empty {
+    position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+    text-align: center; padding: 14px; color: var(--muted); font-size: .9rem;
+  }
+  .toast {
+    position: absolute; left: 50%; bottom: 8px; transform: translateX(-50%);
+    background: rgba(0,0,0,.85); border: 1px solid var(--border);
+    padding: 6px 12px; border-radius: 9px; font-size: .8rem;
+    max-width: 94%; text-align: center; opacity: 0; transition: opacity .25s; pointer-events: none;
+  }
+  .toast.show { opacity: 1; }
+
+  /* ---------- 3. relógio ---------- */
+  .tc-row { flex: 0 0 auto; display: flex; gap: var(--gap); height: 68px; }
+  .tc {
+    flex: 1 1 auto; min-width: 0; background: #0a0c11;
+    border: 1px solid var(--border); border-radius: 12px;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  }
+  .tc .main, .tc .ms { font-size: 2.5rem; font-weight: 700; letter-spacing: .01em; }
+  .tc .ms { color: var(--accent-2); }
+
+  /* ---------- 4. controle remoto: ocupa todo o resto ---------- */
+  .remote {
+    flex: 1 1 auto; min-height: 0;
+    display: grid; grid-template-columns: 1fr 1fr; grid-auto-rows: 1fr; gap: var(--gap);
+  }
+  .remote button {
+    flex-direction: row; gap: 8px; font-size: 1.9rem; font-weight: 700;
+    min-height: 0; padding: 2px;
+  }
+  .remote button .unit { font-size: 1.15rem; font-weight: 600; color: var(--muted); }
+  .remote .minus { color: var(--minus); border-color: #3a2b33; }
+  .remote .plus  { color: var(--plus);  border-color: #24333a; }
+  .remote .minus:active { background: #3a2530; }
+  .remote .plus:active  { background: #1e3540; }
+
+  /* ---------- 5. barra de baixo ---------- */
+  .bottom { flex: 0 0 auto; display: flex; gap: var(--gap); height: 62px; }
+  #playPause { flex: 1 1 auto; font-size: 1.3rem; font-weight: 700; white-space: nowrap; }
+  #speed { flex: 0 0 auto; width: 80px; font-size: 1.05rem; font-weight: 600; }
+  .bottom .icon { flex: 0 0 auto; width: 62px; font-size: 1.4rem; }
+  .on { border-color: var(--accent) !important; color: var(--accent-2); }
+
+  /* Tela mais curta: encolhe as barras para sobrar altura aos botões. */
+  @media (max-height: 700px) {
+    .topbar { height: 42px; }
+    .tc-row, .bottom { height: 56px; }
+    .tc .main, .tc .ms { font-size: 2.1rem; }
+    .remote button { font-size: 1.6rem; }
+    .remote button .unit { font-size: 1rem; }
+  }
+
+  /* Celular deitado ou tela baixa: encolhe tudo. */
+  @media (max-height: 560px) {
+    :root { --gap: 5px; }
+    .topbar { height: 38px; }
+    .tc-row, .bottom { height: 48px; }
+    .tc .main, .tc .ms { font-size: 1.7rem; }
+    .remote button { font-size: 1.2rem; }
+    .remote button .unit { font-size: .82rem; }
+    #playPause { font-size: 1rem; }
+  }
+</style>
+</head>
+<body>
+
+<div id="app">
+
+  <!-- 1. abrir arquivo -->
+  <div class="topbar">
+    <button class="btn-primary" id="pickBtn">📁 Abrir</button>
+    <select id="playlist" aria-label="Vídeos abertos"><option value="">Nenhum vídeo</option></select>
+    <input type="file" id="fileInput" accept="video/*" multiple hidden>
+  </div>
+
+  <!-- 2. vídeo (30% da altura) -->
+  <div class="stage" id="stage">
+    <video id="video" playsinline webkit-playsinline preload="metadata"></video>
+    <div class="empty" id="empty">Toque em <b>&nbsp;Abrir&nbsp;</b> para escolher um vídeo</div>
+    <div class="toast" id="toast"></div>
+  </div>
+
+  <!-- 3. tempo exato -->
+  <div class="tc-row">
+    <div class="tc" id="timecode">
+      <div><span class="main">00:00</span><span class="ms">.000</span></div>
+    </div>
+  </div>
+
+  <!-- 4. controle remoto -->
+  <div class="remote">
+    <button class="minus" data-step="-10">◀ 10<span class="unit">ms</span></button>
+    <button class="plus"  data-step="10">10<span class="unit">ms</span> ▶</button>
+
+    <button class="minus" data-step="-50">◀ 50<span class="unit">ms</span></button>
+    <button class="plus"  data-step="50">50<span class="unit">ms</span> ▶</button>
+
+    <button class="minus" data-step="-100">◀ 100<span class="unit">ms</span></button>
+    <button class="plus"  data-step="100">100<span class="unit">ms</span> ▶</button>
+
+    <button class="minus" data-step="-1000">◀ 1<span class="unit">seg</span></button>
+    <button class="plus"  data-step="1000">1<span class="unit">seg</span> ▶</button>
+
+    <button class="minus" data-step="-10000">◀ 10<span class="unit">seg</span></button>
+    <button class="plus"  data-step="10000">10<span class="unit">seg</span> ▶</button>
+  </div>
+
+  <!-- 5. play e ajustes -->
+  <div class="bottom">
+    <button id="playPause">▶️ Play</button>
+    <select id="speed" aria-label="Velocidade">
+      <option value="0.25">0.25x</option>
+      <option value="0.5">0.5x</option>
+      <option value="0.75">0.75x</option>
+      <option value="1" selected>1x</option>
+      <option value="1.5">1.5x</option>
+      <option value="2">2x</option>
+    </select>
+    <button class="icon" id="muteBtn" title="Som">🔊</button>
+  </div>
+
+</div>
+
+<script>
+(function () {
+  var video     = document.getElementById('video');
+  var empty     = document.getElementById('empty');
+  var toastEl   = document.getElementById('toast');
+  var fileInput = document.getElementById('fileInput');
+  var playlist  = document.getElementById('playlist');
+  var playPause = document.getElementById('playPause');
+  var muteBtn   = document.getElementById('muteBtn');
+
+  var items = [];      // { name, url }
+  var current = -1;
+
+  // Altura real da tela: cobre navegadores sem 100dvh e a barra que some no iPhone.
+  function setVH() {
+    document.documentElement.style.setProperty('--vh', window.innerHeight + 'px');
+  }
+  setVH();
+  window.addEventListener('resize', setVH);
+  window.addEventListener('orientationchange', function () { setTimeout(setVH, 250); });
+  if (window.visualViewport) window.visualViewport.addEventListener('resize', setVH);
+
+  var toastTimer = null;
+  function toast(msg) {
+    toastEl.textContent = msg;
+    toastEl.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(function () { toastEl.classList.remove('show'); }, 2600);
+  }
+
+  function renderList() {
+    playlist.innerHTML = '';
+    if (!items.length) {
+      playlist.appendChild(new Option('Nenhum vídeo', ''));
+      playlist.disabled = true;
+      return;
+    }
+    playlist.disabled = false;
+    items.forEach(function (it, i) {
+      playlist.appendChild(new Option((i + 1) + '. ' + it.name, String(i)));
+    });
+    playlist.value = String(current);
+  }
+
+  function load(i) {
+    if (i < 0 || i >= items.length) return;
+    current = i;
+    video.src = items[i].url;
+    empty.hidden = true;
+    video.load();
+    var p = video.play();
+    if (p && p.catch) p.catch(function () { /* o navegador pode exigir um toque */ });
+    playlist.value = String(i);
+    pedirWakeLock();
+  }
+
+  function addFiles(fileList) {
+    var first = -1;
+    Array.prototype.forEach.call(fileList, function (f) {
+      items.push({ name: f.name, url: URL.createObjectURL(f) });
+      if (first < 0) first = items.length - 1;
+    });
+    if (first < 0) return;
+    current = first;
+    renderList();
+    load(first);
+  }
+
+  document.getElementById('pickBtn').addEventListener('click', function () { fileInput.click(); });
+  fileInput.addEventListener('change', function (e) {
+    if (e.target.files && e.target.files.length) addFiles(e.target.files);
+    e.target.value = '';
+  });
+  playlist.addEventListener('change', function (e) {
+    if (e.target.value !== '') load(parseInt(e.target.value, 10));
+  });
+
+  // ---------- relógio com milissegundos ----------
+  var tcEl    = document.getElementById('timecode');
+  var mainEl  = tcEl.querySelector('.main');
+  var msEl    = tcEl.querySelector('.ms');
+
+  function fmtTC(s) {
+    if (!isFinite(s) || s < 0) s = 0;
+    var ms = Math.floor((s % 1) * 1000);
+    var t  = Math.floor(s);
+    var h  = Math.floor(t / 3600), m = Math.floor((t % 3600) / 60), sec = t % 60;
+    var p2 = function (n) { return n < 10 ? '0' + n : '' + n; };
+    var p3 = function (n) { return n < 10 ? '00' + n : n < 100 ? '0' + n : '' + n; };
+    return { main: (h ? h + ':' + p2(m) : p2(m)) + ':' + p2(sec), ms: '.' + p3(ms) };
+  }
+
+  function renderTimecode() {
+    var t = fmtTC(video.currentTime || 0);
+    mainEl.textContent = t.main;
+    msEl.textContent = t.ms;
+  }
+
+  var rafId = null;
+  function tick() {
+    renderTimecode();
+    rafId = video.paused ? null : requestAnimationFrame(tick);
+  }
+  video.addEventListener('play', function () { if (!rafId) rafId = requestAnimationFrame(tick); });
+  video.addEventListener('timeupdate', renderTimecode);
+  video.addEventListener('seeked', renderTimecode);
+
+  // ---------- ajuste fino ----------
+  // Só move o tempo. Não pausa: se estava tocando, segue tocando do novo ponto.
+  function nudge(ms) {
+    if (!video.src) return;
+    var max = isFinite(video.duration) ? video.duration : Infinity;
+    video.currentTime = Math.min(max, Math.max(0, (video.currentTime || 0) + ms / 1000));
+    renderTimecode();
+  }
+
+  // Toque simples move uma vez; segurar repete.
+  function bindHold(btn, fn) {
+    var holdTimer = null, repeatTimer = null;
+    function stop() {
+      clearTimeout(holdTimer); clearInterval(repeatTimer);
+      holdTimer = repeatTimer = null;
+    }
+    btn.addEventListener('pointerdown', function (e) {
+      e.preventDefault();
+      fn();
+      holdTimer = setTimeout(function () { repeatTimer = setInterval(fn, 90); }, 420);
+    });
+    ['pointerup', 'pointerleave', 'pointercancel'].forEach(function (ev) {
+      btn.addEventListener(ev, stop);
+    });
+  }
+
+  Array.prototype.forEach.call(document.querySelectorAll('.remote button'), function (btn) {
+    var step = parseInt(btn.getAttribute('data-step'), 10);
+    bindHold(btn, function () { nudge(step); });
+  });
+
+  // ---------- controles ----------
+  playPause.addEventListener('click', function () {
+    if (!video.src) return;
+    if (video.paused) video.play(); else video.pause();
+  });
+  document.getElementById('speed').addEventListener('change', function (e) {
+    video.playbackRate = parseFloat(e.target.value);
+  });
+  muteBtn.addEventListener('click', function () {
+    video.muted = !video.muted;
+    muteBtn.textContent = video.muted ? '🔇' : '🔊';
+    muteBtn.classList.toggle('on', video.muted);
+  });
+  video.addEventListener('click', function () {
+    if (!video.src) return;
+    if (video.paused) video.play(); else video.pause();
+  });
+
+  video.addEventListener('play',  function () { playPause.textContent = '⏸️ Pausa'; pedirWakeLock(); });
+  video.addEventListener('pause', function () { playPause.textContent = '▶️ Play'; });
+  video.addEventListener('loadedmetadata', renderTimecode);
+  video.addEventListener('error', function () {
+    toast('Não foi possível abrir. Formato não suportado neste aparelho.');
+  });
+  video.addEventListener('ended', function () {
+    if (!video.loop && current < items.length - 1) load(current + 1);
+  });
+
+  // Teclado (quando usado no computador).
+  document.addEventListener('keydown', function (e) {
+    var tag = (e.target.tagName || '').toLowerCase();
+    if (tag === 'input' || tag === 'select') return;
+    if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+      e.preventDefault();
+      var step = e.shiftKey ? 10 : (e.ctrlKey || e.metaKey) ? 1000 : 100;
+      nudge(e.key === 'ArrowLeft' ? -step : step);
+    } else if (e.code === 'Space') {
+      e.preventDefault();
+      if (video.paused) video.play(); else video.pause();
+    }
+  });
+
+  // ---------- manter a tela ligada ----------
+  // Segura a tela acesa enquanto houver vídeo aberto, tocando ou pausado.
+  // Assim dá para ficar ajustando quadro a quadro sem a tela apagar.
+  var wakeLock = null;
+
+  async function pedirWakeLock() {
+    if (!('wakeLock' in navigator) || wakeLock || current < 0) return;
+    try {
+      wakeLock = await navigator.wakeLock.request('screen');
+      // O sistema solta o pedido sozinho ao trocar de app. Marcamos para repedir.
+      wakeLock.addEventListener('release', function () { wakeLock = null; });
+    } catch (e) { /* sem permissão ou sem suporte: segue sem travar a tela */ }
+  }
+
+  // Repede ao voltar para a aba, que é quando o sistema já soltou o pedido.
+  document.addEventListener('visibilitychange', function () {
+    if (document.visibilityState === 'visible') pedirWakeLock();
+  });
+
+  if ('mediaSession' in navigator) {
+    video.addEventListener('loadedmetadata', function () {
+      if (current >= 0) navigator.mediaSession.metadata = new MediaMetadata({ title: items[current].name });
+    });
+    navigator.mediaSession.setActionHandler('play',  function () { video.play(); });
+    navigator.mediaSession.setActionHandler('pause', function () { video.pause(); });
+  }
+
+  document.addEventListener('dragover', function (e) { e.preventDefault(); });
+  document.addEventListener('drop', function (e) {
+    e.preventDefault();
+    if (e.dataTransfer.files.length) addFiles(e.dataTransfer.files);
+  });
+
+  renderList();
+  renderTimecode();
+})();
+</script>
+</body>
+</html>
